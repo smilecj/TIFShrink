@@ -7,7 +7,7 @@ This project provides a web-based tool for compressing TIF images without alteri
 - Batch compress TIF images.
 - Maintain the original pixel ratio.
 - Fully web-based, no installation required.
-![temp](.\temp.png)
+![temp](temp.png)
 ## Usage
 1. Open the website.
 2. Upload your TIF images.
