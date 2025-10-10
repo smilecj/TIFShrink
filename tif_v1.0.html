@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIFF 批量压缩工具</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* CSS 样式与之前版本完全相同，此处省略 */
+        @keyframes breathe { 0% { background-color: #6a11cb; } 50% { background-color: #2575fc; } 100% { background-color: #6a11cb; } } body { min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; margin: 0; background: linear-gradient(135deg, #6a11cb, #2575fc); } .container-custom { max-width: 900px; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); animation: breathe 8s infinite; } @media (prefers-reduced-motion: reduce) { .container-custom { animation: none; } } .btn-bubble { background-color: #6a11cb; color: white; border: none; border-radius: 50px; padding: 12px 30px; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); transition: all 0.3s ease; margin: 0 5px; } .btn-bubble:hover { transform: translateY(-2px); box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3); } .btn-bubble:active { transform: translateY(0); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); } .btn-bubble:disabled { background-color: #cccccc; cursor: not-allowed; transform: none; box-shadow: none; } .preview-container { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 20px; } .preview-item { background: white; border-radius: 10px; padding: 10px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); transition: transform 0.3s ease; max-width: 220px; } .preview-item:hover { transform: scale(1.02); } .preview-item img { max-width: 200px; max-height: 150px; border: 2px solid #ddd; padding: 5px; border-radius: 5px; } .size-info { font-size: 12px; color: #666; margin-top: 5px; } .size-reduction { color: #28a745; font-weight: bold; } .size-warning { color: #ffc107; font-weight: bold; } .control-group { margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 10px; } .progress-container { margin: 20px 0; display: none; } .upload-stats { margin: 15px 0; padding: 10px; background-color: #e9f5ff; border-radius: 8px; font-size: 14px; } .file-limit-info { color: #dc3545; font-size: 14px; margin-top: 10px; } .memory-info { font-size: 13px; color: #6c757d; margin-top: 5px; } .target-size-control { margin-top: 15px; } .button-group { margin: 20px 0; } .file-preview { margin-top: 15px; padding: 10px; background-color: #f1f8ff; border-radius: 8px; } .file-list { max-height: 200px; overflow-y: auto; margin-top: 10px; } .file-item { padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 14px; display: flex; justify-content: space-between; align-items: center; } .file-item:hover { background-color: #e8f4fd; } .delete-btn { color: #dc3545; background: none; border: none; cursor: pointer; padding: 2px 5px; opacity: 0.7; transition: opacity 0.3s; } .delete-btn:hover { opacity: 1; } .file-info { display: flex; align-items: center; }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="container-custom text-center">
+            <h2 class="mb-4">TIFF 批量压缩工具</h2>
+            <p class="mb-2">支持指定压缩目标大小，可手动管理文件</p>
+            <p class="file-limit-info"><i class="fas fa-info-circle"></i> 支持TIFF格式，单个文件限50MB，建议一次不超过5个文件。注意：不支持JPEG压缩或多页TIFF。请确保使用无压缩/LZW单页TIFF。</p>
+            <div class="mb-4"><label for="fileInput" class="file-input-bubble btn-bubble"><i class="fas fa-upload mr-2"></i>选择文件</label><input type="file" id="fileInput" accept=".tif,.tiff" multiple hidden aria-label="选择TIFF文件"></div>
+            <div class="file-preview" id="filePreview" style="display: none;"><h5>已选择文件 (<span id="selectedFileCount">0</span>)</h5><div class="file-list" id="fileList"></div></div>
+            <div class="control-group"><h5>压缩设置</h5><div class="target-size-control"><label for="targetSize" class="form-label">目标文件大小:</label><div class="input-group"><input type="number" id="targetSize" min="0.1" max="50" step="0.1" value="2" class="form-control"><div class="input-group-append"><span class="input-group-text">MB</span></div></div><small class="form-text text-muted mt-1">设置每个文件压缩后的目标大小，过小将影响图片质量</small></div></div>
+            <div class="button-group"><button id="convertBtn" class="btn btn-bubble" disabled><i class="fas fa-magic mr-2"></i>开始转换</button><button id="clearBtn" class="btn btn-bubble" disabled><i class="fas fa-trash mr-2"></i>清空所有文件</button></div>
+            <div class="upload-stats" id="uploadStats" style="display: none;"><div>已处理: <span id="fileCount">0</span> 个文件</div><div>原始总大小: <span id="originalTotalSize">0 MB</span></div><div>压缩后总大小: <span id="compressedTotalSize">0 MB</span></div><div>总节省空间: <span id="totalSavings" class="size-reduction">0%</span></div><div class="memory-info" id="memoryInfo">内存使用: 监控中...</div></div>
+            <div class="progress-container"><div class="progress"><div id="compressionProgress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div></div><div id="progressText" class="mt-2 text-muted">准备处理...</div></div>
+            <button id="downloadAllBtn" class="btn btn-bubble" disabled><i class="fas fa-download mr-2"></i>下载所有压缩图片</button>
+            <div id="preview" class="preview-container mt-4"></div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/tiff.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/motiz88/canvas-to-tiff@master/canvastotiff.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        let selectedFiles = []; let compressedImages = []; let originalTotalSize = 0; let compressedTotalSize = 0; let currentTargetSizeBytes = 0; const MAX_FILE_SIZE = 50 * 1024 * 1024; const MAX_CONCURRENT_FILES = 5;
+
+        async function garbageCollect() { if (globalThis.gc) { globalThis.gc(); } else { await new Promise(resolve => setTimeout(resolve, 150)); } }
+
+        window.addEventListener('DOMContentLoaded', function() { let missingLibs = []; if (typeof Tiff === 'undefined') missingLibs.push('Tiff.js'); if (typeof CanvasToTIFF === 'undefined') missingLibs.push('CanvasToTIFF'); if (typeof JSZip === 'undefined') missingLibs.push('JSZip'); if (missingLibs.length > 0) { alert(`${missingLibs.join(', ')} 库加载失败，请检查网络或刷新页面。`); } updateTargetSize(); });
+        document.getElementById('targetSize').addEventListener('input', updateTargetSize);
+        document.getElementById("fileInput").addEventListener("change", function(event) { const files = Array.from(event.target.files); if (!files.length) return; const oversizeFiles = files.filter(file => file.size > MAX_FILE_SIZE); if (oversizeFiles.length > 0) { alert(`以下文件超过50MB限制，已过滤：\n${oversizeFiles.map(f => f.name).join('\n')}`); } selectedFiles = selectedFiles.concat(files.filter(file => file.size <= MAX_FILE_SIZE)); const uniqueFiles = Array.from(new Map(selectedFiles.map(file => [file.name + file.size, file])).values()); selectedFiles = uniqueFiles; updateFileList(); updateButtonStates(); event.target.value = ''; });
+        document.getElementById("clearBtn").addEventListener("click", function() { if (!confirm("确定要清空所有已选文件吗？")) return; selectedFiles = []; compressedImages = []; originalTotalSize = 0; compressedTotalSize = 0; updateFileList(); document.getElementById("preview").innerHTML = ""; document.getElementById("uploadStats").style.display = "none"; document.querySelector('.progress-container').style.display = 'none'; document.getElementById("downloadAllBtn").disabled = true; updateButtonStates(); });
+        document.getElementById("convertBtn").addEventListener("click", async function() { if (selectedFiles.length === 0) return; const targetSizeMB = parseFloat(document.getElementById('targetSize').value); if (isNaN(targetSizeMB) || targetSizeMB <= 0 || targetSizeMB > 50) { return alert("请设置0.1到50之间的目标大小"); } currentTargetSizeBytes = targetSizeMB * 1024 * 1024; if (selectedFiles.length > MAX_CONCURRENT_FILES) { if (!confirm(`一次处理${selectedFiles.length}个文件可能导致浏览器卡顿，建议分批处理。\n是否继续？`)) { return; } } originalTotalSize = 0; selectedFiles.forEach(f => originalTotalSize += f.size); document.getElementById("preview").innerHTML = ""; compressedImages = []; compressedTotalSize = 0; document.querySelector('.progress-container').style.display = 'block'; document.getElementById('uploadStats').style.display = 'block'; document.getElementById("downloadAllBtn").disabled = true; document.getElementById("convertBtn").disabled = true; await processFilesInBatches(selectedFiles, 2); document.getElementById("downloadAllBtn").disabled = compressedImages.length === 0; document.getElementById("convertBtn").disabled = false; updateProgress(100, "所有文件处理完成"); updateStats(); });
+        document.getElementById("downloadAllBtn").addEventListener("click", async function() { if (compressedImages.length === 0) return alert("没有可供下载的图片！"); const zip = new JSZip(); compressedImages.forEach(item => zip.file(item.originalName, item.blob)); updateProgress(0, "正在生成ZIP文件..."); const content = await zip.generateAsync({ type: "blob" }, (metadata) => { updateProgress(metadata.percent, `正在生成ZIP文件: ${metadata.percent.toFixed(0)}%`); }); const link = document.createElement("a"); link.href = URL.createObjectURL(content); link.download = "compressed_tiff_images.zip"; link.click(); URL.revokeObjectURL(link.href); setTimeout(() => { document.querySelector('.progress-container').style.display = 'none'; }, 2000); });
+
+        async function processFilesInBatches(files, batchSize) {
+            for (let i = 0; i < files.length; i += batchSize) {
+                const batch = files.slice(i, i + batchSize);
+                await Promise.all(batch.map((file, index) => {
+                    const overallIndex = i + index;
+                    return processSingleFile(file, overallIndex, files.length);
+                }));
+            }
+        }
+
+        async function processSingleFile(file, index, totalFiles) {
+            const MAX_ATTEMPTS = 3;
+            let lastError = null;
+
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                try {
+                    const progressText = `正在处理 ${file.name}` + (attempt > 1 ? ` (第 ${attempt} 次尝试)` : '');
+                    updateProgress((index / totalFiles) * 100, progressText);
+
+                    if (file.size <= currentTargetSizeBytes) {
+                        compressedImages.push({ blob: file, originalName: file.name, originalSize: file.size, compressedSize: file.size, isOriginal: true });
+                        compressedTotalSize += file.size;
+                        const previewUrl = URL.createObjectURL(file);
+                        displayPreview(previewUrl, file.name, file.size, file.size, true, currentTargetSizeBytes);
+                        updateStats();
+                        return; // 成功，直接返回
+                    }
+
+                    await garbageCollect();
+
+                    const arrayBuffer = await readLargeFileAsArrayBuffer(file, index, totalFiles);
+
+                    updateProgress((index / totalFiles) * 100, `正在解码 ${file.name}...`);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+
+                    if (!validateTiffHeader(arrayBuffer)) throw new Error('无效的TIFF文件头');
+
+                    const tiff = new Tiff({ buffer: arrayBuffer, TOTAL_MEMORY: 4294967296 });
+                    const canvas = tiff.toCanvas();
+                    tiff.close();
+
+                    updateProgress((index / totalFiles) * 100, `正在压缩 ${file.name}...`);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+
+                    const result = await findBestScale(canvas, currentTargetSizeBytes);
+                    canvas.width = canvas.height = 0;
+                    if (!result || !result.tiffBlob) throw new Error('无法生成压缩后的TIFF');
+
+                    compressedImages.push({ blob: result.tiffBlob, originalName: file.name.replace(/\.tif|\.tiff$/i, '_compressed.tif'), originalSize: file.size, compressedSize: result.tiffBlob.size, isOriginal: false });
+                    compressedTotalSize += result.tiffBlob.size;
+                    displayPreview(result.previewDataUrl, file.name.replace(/\.tif|\.tiff$/i, '_compressed.tif'), file.size, result.tiffBlob.size, false, currentTargetSizeBytes);
+                    updateStats();
+
+                    return;
+
+                } catch (error) {
+                    lastError = error;
+                    console.warn(`文件 ${file.name} 第 ${attempt} 次尝试失败:`, error);
+                    if (error.message && (error.message.includes('无效') || error.message.includes('不支持'))) { break; }
+                    if (attempt < MAX_ATTEMPTS) { await new Promise(resolve => setTimeout(resolve, 200 * attempt)); }
+                }
+            }
+
+            const errorMessage = lastError.message || '一个未知的底层库错误（文件可能与解码器严重不兼容）';
+            showError(`文件 ${file.name} 处理失败 (已尝试 ${MAX_ATTEMPTS} 次): ${errorMessage}`);
+            compressedImages.push({ blob: file, originalName: file.name, originalSize: file.size, compressedSize: file.size, isOriginal: true });
+            compressedTotalSize += file.size;
+            const previewUrl = URL.createObjectURL(file);
+            displayPreview(previewUrl, file.name, file.size, file.size, true, currentTargetSizeBytes, null, '格式异常');
+            updateStats();
+        }
+
+        function readLargeFileAsArrayBuffer(file, index, totalFiles) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                const timeoutDuration = file.size > 40 * 1024 * 1024 ? 180000 : 60000;
+                let timeoutId = setTimeout(() => {
+                    reader.abort();
+                    reject(new Error(`文件读取超时(${timeoutDuration/1000}秒)`));
+                }, timeoutDuration);
+
+                reader.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        const overallPercent = ((index + (e.loaded / e.total)) / totalFiles) * 100;
+                        updateProgress(overallPercent, `正在读取 ${file.name}: ${percent.toFixed(0)}%`);
+                    }
+                };
+                reader.onload = (event) => { clearTimeout(timeoutId); resolve(event.target.result); };
+                reader.onerror = () => { clearTimeout(timeoutId); reject(new Error('文件读取失败')); };
+                reader.onabort = () => { clearTimeout(timeoutId); reject(new Error('文件读取被中止')); };
+
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function findBestScale(canvas, targetSizeBytes) { const MIN_SCALE = 0.1, MAX_SCALE = 1.0, MAX_ATTEMPTS = 10; let low = MIN_SCALE, high = MAX_SCALE; let bestResult = { tiffBlob: null, previewDataUrl: null }; let smallestEverResult = { tiffBlob: null, previewDataUrl: null }; for (let i = 0; i < MAX_ATTEMPTS && high >= low; i++) { const mid = (low + high) / 2; if (mid < MIN_SCALE) break; const tempCanvas = document.createElement('canvas'); tempCanvas.width = Math.max(1, Math.floor(canvas.width * mid)); tempCanvas.height = Math.max(1, Math.floor(canvas.height * mid)); const tempCtx = tempCanvas.getContext('2d'); tempCtx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height); const tempTiffBlob = await canvasToTiffBlob(tempCanvas); if (tempTiffBlob) { const tempPreviewDataUrl = tempCanvas.toDataURL('image/png'); if (!smallestEverResult.tiffBlob || tempTiffBlob.size < smallestEverResult.tiffBlob.size) { smallestEverResult = { tiffBlob: tempTiffBlob, previewDataUrl: tempPreviewDataUrl }; } if (tempTiffBlob.size <= targetSizeBytes) { bestResult = { tiffBlob: tempTiffBlob, previewDataUrl: tempPreviewDataUrl }; low = mid + 0.01; } else { high = mid - 0.01; } } tempCanvas.width = tempCanvas.height = 0; } return bestResult.tiffBlob ? bestResult : smallestEverResult; }
+        function canvasToTiffBlob(canvas) { return new Promise((resolve, reject) => { try { CanvasToTIFF.toBlob(canvas, (blob) => resolve(blob)); } catch (e) { reject(e); } }); }
+        function updateTargetSize() { const targetSizeMB = parseFloat(document.getElementById('targetSize').value || '2'); if (!isNaN(targetSizeMB) && targetSizeMB > 0) { currentTargetSizeBytes = targetSizeMB * 1024 * 1024; } }
+        function updateFileList() { const e = document.getElementById("fileList"), t = document.getElementById("filePreview"), l = document.getElementById("selectedFileCount"); if (e.innerHTML = "", 0 === selectedFiles.length) return void(t.style.display = "none"); t.style.display = "block", l.textContent = selectedFiles.length; let n = 0; selectedFiles.forEach((t, i) => { n += t.size; const s = document.createElement("div"); s.className = "file-item"; const a = (t.size / 1024 / 1024).toFixed(2); s.innerHTML = ` <div class="file-info"> <i class="fas fa-file-image mr-2"></i>${truncateFileName(t.name,25)} <span class="text-muted">(${a} MB)</span> </div> <button class="delete-btn" title="删除此文件" onclick="deleteFile(${i})"><i class="fas fa-times"></i></button>`, e.appendChild(s) }); const s = (n / 1024 / 1024).toFixed(2), i = document.createElement("div"); i.className = "file-item text-primary", i.innerHTML = `<i class="fas fa-sum mr-2"></i>总计: ${s} MB`, e.appendChild(i) }
+        function deleteFile(index) { selectedFiles.splice(index, 1); updateFileList(); updateButtonStates(); }
+        function updateButtonStates() { const hasFiles = selectedFiles.length > 0; document.getElementById("convertBtn").disabled = !hasFiles; document.getElementById("clearBtn").disabled = !hasFiles; }
+        function displayPreview(previewUrl, fileName, originalSize, compressedSize, isOriginal, targetSize, method, errorReason) { const safeTargetSize = targetSize || currentTargetSizeBytes || 2097152; const container = document.createElement("div"); container.className = "preview-item"; const img = document.createElement("img"); img.src = previewUrl; img.alt = fileName; img.onload = () => { if (previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl); }; const name = document.createElement("div"); name.textContent = truncateFileName(fileName, 20); name.style.cssText = "margin-top:5px; font-size:14px; color:#666;"; const sizeInfo = document.createElement("div"); sizeInfo.className = "size-info"; const originalSizeMB = (originalSize / 1024 / 1024).toFixed(2); const compressedSizeMB = (compressedSize / 1024 / 1024).toFixed(2); if (isOriginal) { let reasonText = errorReason ? `无法压缩 (${errorReason})` : "无法压缩"; let suggestionText = (errorReason && (errorReason.includes("格式异常") || errorReason.includes("格式不支持"))) ? "<div style='font-size:11px;color:#666;margin-top:3px;'>建议使用ImageMagick或PS转换为无压缩单页TIFF。</div>" : ""; sizeInfo.innerHTML = (originalSize <= safeTargetSize) ? `原始大小: ${originalSizeMB} MB (小于目标)` : `原始大小: ${originalSizeMB} MB (保留原文件)<br><span class="size-warning">${reasonText}</span>${suggestionText}`; } else { const targetSizeMB = (safeTargetSize / 1024 / 1024).toFixed(2); let sizeIndicator = (compressedSize > safeTargetSize) ? `<span class="size-warning">(超出目标)</span>` : `<span class="size-reduction">(符合目标)</span>`; sizeInfo.innerHTML = `原始: ${originalSizeMB} MB → 压缩后: <b>${compressedSizeMB} MB</b> ${sizeIndicator}`; } container.appendChild(img); container.appendChild(name); container.appendChild(sizeInfo); document.getElementById("preview").appendChild(container); }
+        function updateProgress(percent, text) { const progressBar = document.getElementById('compressionProgress'); const progressText = document.getElementById('progressText'); percent = Math.min(100, Math.max(0, percent)); progressBar.style.width = `${percent}%`; progressBar.setAttribute('aria-valuenow', percent); progressText.textContent = text; }
+        function updateStats() { document.getElementById('fileCount').textContent = compressedImages.length; document.getElementById('originalTotalSize').textContent = (originalTotalSize / 1024 / 1024).toFixed(2) + ' MB'; document.getElementById('compressedTotalSize').textContent = (compressedTotalSize / 1024 / 1024).toFixed(2) + ' MB'; if (originalTotalSize > 0 && compressedTotalSize > 0) { const savings = Math.max(0, Math.round((1 - compressedTotalSize / originalTotalSize) * 100)); document.getElementById('totalSavings').textContent = `${savings}%`; } else { document.getElementById('totalSavings').textContent = '0%'; } if (performance?.memory) { const usedMB = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1); const totalMB = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(1); document.getElementById('memoryInfo').textContent = `内存使用: ${usedMB} MB / ${totalMB} MB`; } else { document.getElementById('memoryInfo').textContent = '内存使用: N/A'; } }
+        function showError(message) { const errorContainer = document.querySelector('.container-custom'); const errorDiv = document.createElement('div'); errorDiv.className = 'alert alert-danger mt-3'; errorDiv.textContent = message; errorDiv.role = 'alert'; errorContainer.insertBefore(errorDiv, errorContainer.firstChild); setTimeout(() => errorDiv.remove(), 6000); }
+        function truncateFileName(name, maxLength = 20) { if (name.length <= maxLength) return name; const ext = name.substring(name.lastIndexOf('.')); const base = name.substring(0, name.lastIndexOf('.')); return base.substring(0, maxLength - ext.length - 3) + '...' + ext; }
+        function validateTiffHeader(buffer) { if (buffer.byteLength < 8) return false; const view = new DataView(buffer); const byteOrder = view.getUint16(0, false); if (byteOrder !== 0x4D4D && byteOrder !== 0x4949) return false; const isLittleEndian = byteOrder === 0x4949; return view.getUint16(2, isLittleEndian) === 42; }
+        function detectCompressionType(buffer, isBigEndian) { const view = new DataView(buffer); let offset = view.getUint32(4, !isBigEndian); if (offset < 8 || offset >= buffer.byteLength) return null; const numTags = view.getUint16(offset, !isBigEndian); offset += 2; for (let i = 0; i < numTags; i++) { const tagOffset = offset + (i * 12); if (tagOffset + 12 > buffer.byteLength) return null; const tag = view.getUint16(tagOffset, !isBigEndian); if (tag === 259) { const type = view.getUint16(tagOffset + 2, !isBigEndian); const count = view.getUint32(tagOffset + 4, !isBigEndian); if (type === 3 && count === 1) { return view.getUint16(tagOffset + 8, !isBigEndian); } } } return 1; }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://unpkg.com/@popperjs/core@2/dist/umd/popper.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
