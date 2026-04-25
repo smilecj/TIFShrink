@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>TIFShrink Pro - 功能测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .test h3 { margin-top: 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .pending { color: orange; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+        button { padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; margin: 5px; }
+        button:hover { background: #4f46e5; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        input[type="file"] { margin: 10px 0; }
+        #results { margin-top: 20px; }
+        .test-section { margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <h1>TIFShrink Pro - 功能测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 库加载测试</h2>
+        <div class="test" id="libTest">
+            <h3>检查依赖库</h3>
+            <div id="libStatus">检查中...</div>
+            <button onclick="testLibs()">重新检测</button>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 文件上传测试</h2>
+        <div class="test">
+            <h3>上传TIFF测试</h3>
+            <input type="file" id="testFile" accept=".tif,.tiff" onchange="handleTestFile(this.files[0])">
+            <div id="fileInfo"></div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 格式转换测试</h2>
+        <div class="test">
+            <h3>选择输出格式</h3>
+            <select id="testFormat">
+                <option value="tiff">TIFF</option>
+                <option value="png">PNG</option>
+                <option value="jpeg">JPEG</option>
+                <option value="pdf">PDF</option>
+                <option value="svg">SVG</option>
+            </select>
+            <button id="convertBtn" onclick="testConvert()" disabled>开始转换测试</button>
+            <div id="convertResult"></div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. 控制台日志</h2>
+        <div class="log" id="logArea"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试结果</h2>
+        <div id="results"></div>
+    </div>
+
+    <!-- 加载测试库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/tiff.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/motiz88/canvas-to-tiff@master/canvastotiff.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script>
+        let testFile = null;
+        let testCanvas = null;
+        const results = [];
+        
+        function log(msg, type = 'info') {
+            const area = document.getElementById('logArea');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'pass' ? 'green' : type === 'fail' ? 'red' : type === 'warn' ? 'orange' : '#666';
+            area.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+            area.scrollTop = area.scrollHeight;
+            console.log(`[TEST ${type.toUpperCase()}]`, msg);
+        }
+        
+        function addResult(name, passed, detail = '') {
+            results.push({ name, passed, detail });
+            const div = document.createElement('div');
+            div.className = `test ${passed ? 'pass' : 'fail'}`;
+            div.innerHTML = `<strong>${passed ? '✓' : '✗'} ${name}</strong>${detail ? ': ' + detail : ''}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        async function testLibs() {
+            const status = document.getElementById('libStatus');
+            status.innerHTML = '检测中...';
+            
+            const libs = {
+                'JSZip': typeof JSZip !== 'undefined',
+                'Tiff': typeof Tiff !== 'undefined',
+                'CanvasToTIFF': typeof CanvasToTIFF !== 'undefined',
+                'jsPDF': typeof window.jspdf !== 'undefined'
+            };
+            
+            let allPass = true;
+            for (const [name, loaded] of Object.entries(libs)) {
+                log(`${name}: ${loaded ? '已加载' : '未加载'}`, loaded ? 'pass' : 'fail');
+                allPass = allPass && loaded;
+            }
+            
+            status.innerHTML = Object.entries(libs).map(([k, v]) => 
+                `<span style="color:${v ? 'green' : 'red'}">${k}: ${v ? '✓' : '✗'}</span>`
+            ).join(' | ');
+            
+            addResult('库加载测试', allPass, allPass ? '所有依赖库已加载' : '部分库加载失败');
+            return allPass;
+        }
+        
+        async function handleTestFile(file) {
+            testFile = file;
+            const info = document.getElementById('fileInfo');
+            
+            if (!file) {
+                info.innerHTML = '未选择文件';
+                document.getElementById('convertBtn').disabled = true;
+                return;
+            }
+            
+            log(`选择文件: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+            
+            info.innerHTML = `
+                <p><strong>文件名:</strong> ${file.name}</p>
+                <p><strong>大小:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                <p><strong>类型:</strong> ${file.type || 'unknown'}</p>
+            `;
+            
+            // 尝试解码 TIFF
+            log('开始解码TIFF文件...', 'warn');
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                log(`文件读取完成: ${arrayBuffer.byteLength} bytes`);
+                
+                if (typeof Tiff === 'undefined') {
+                    throw new Error('Tiff.js 未加载');
+                }
+                
+                log('创建 Tiff 对象...', 'warn');
+                const tiff = new Tiff({ buffer: arrayBuffer });
+                
+                log(`TIFF 宽度: ${tiff.width}, 高度: ${tiff.height}`);
+                
+                log('转换为 Canvas...', 'warn');
+                testCanvas = tiff.toCanvas();
+                
+                if (testCanvas) {
+                    log(`Canvas 创建成功: ${testCanvas.width}x${testCanvas.height}`, 'pass');
+                    document.getElementById('convertBtn').disabled = false;
+                    addResult('TIFF解码测试', true, `${tiff.width}x${tiff.height}`);
+                } else {
+                    throw new Error('Canvas 创建失败');
+                }
+                
+                tiff.close();
+                
+            } catch (err) {
+                log(`TIFF 解码失败: ${err.message}`, 'fail');
+                addResult('TIFF解码测试', false, err.message);
+                info.innerHTML += `<p style="color:red">解码失败: ${err.message}</p>`;
+            }
+        }
+        
+        async function testConvert() {
+            if (!testCanvas) {
+                alert('请先上传TIFF文件');
+                return;
+            }
+            
+            const format = document.getElementById('testFormat').value;
+            const resultDiv = document.getElementById('convertResult');
+            resultDiv.innerHTML = '<p>转换中...</p>';
+            
+            log(`开始转换测试: ${format}`, 'warn');
+            
+            try {
+                let blob;
+                let size;
+                
+                switch (format) {
+                    case 'tiff':
+                        log('测试 canvas-to-tiff...', 'warn');
+                        blob = await new Promise((res, rej) => {
+                            CanvasToTIFF.toBlob(testCanvas, b => b ? res(b) : rej(new Error('转换失败')), { quality: 95 });
+                        });
+                        break;
+                        
+                    case 'png':
+                        blob = await new Promise((res) => {
+                            testCanvas.toBlob(b => res(b), 'image/png');
+                        });
+                        break;
+                        
+                    case 'jpeg':
+                        blob = await new Promise((res) => {
+                            testCanvas.toBlob(b => res(b), 'image/jpeg', 0.9);
+                        });
+                        break;
+                        
+                    case 'pdf':
+                        const { jsPDF } = window.jspdf;
+                        const r = Math.min(190 / testCanvas.width, 277 / testCanvas.height);
+                        const doc = new jsPDF({
+                            orientation: testCanvas.width > testCanvas.height ? 'l' : 'p',
+                            unit: 'mm',
+                            format: [testCanvas.width * r, testCanvas.height * r]
+                        });
+                        doc.addImage(testCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, testCanvas.width * r, testCanvas.height * r);
+                        blob = await doc.output('blob');
+                        break;
+                        
+                    case 'svg':
+                        const dataUrl = testCanvas.toDataURL('image/png');
+                        const svg = `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${testCanvas.width}" height="${testCanvas.height}">
+  <image href="${dataUrl}" width="${testCanvas.width}" height="${testCanvas.height}"/>
+</svg>`;
+                        blob = new Blob([svg], { type: 'image/svg+xml' });
+                        break;
+                        
+                    default:
+                        throw new Error('未知格式');
+                }
+                
+                size = blob.size;
+                log(`${format.toUpperCase()} 转换成功: ${(size / 1024).toFixed(2)} KB`, 'pass');
+                
+                const ratio = ((1 - size / testFile.size) * 100).toFixed(1);
+                resultDiv.innerHTML = `
+                    <p style="color:green">✓ 转换成功!</p>
+                    <p><strong>原始大小:</strong> ${(testFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p><strong>转换后:</strong> ${(size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p><strong>压缩比:</strong> ${ratio > 0 ? '-' : '+'}${Math.abs(ratio)}%</p>
+                    <p><a href="${URL.createObjectURL(blob)}" download="test_output.${format}">下载测试文件</a></p>
+                `;
+                
+                addResult(`${format.toUpperCase()}转换测试`, true, `${(size / 1024).toFixed(1)} KB`);
+                
+            } catch (err) {
+                log(`${format.toUpperCase()} 转换失败: ${err.message}`, 'fail');
+                resultDiv.innerHTML = `<p style="color:red">转换失败: ${err.message}</p>`;
+                addResult(`${format.toUpperCase()}转换测试`, false, err.message);
+            }
+        }
+        
+        // 页面加载时自动检测
+        window.onload = async () => {
+            log('页面加载，开始测试...');
+            await testLibs();
+        };
+    </script>
+</body>
+</html>
